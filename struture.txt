@@ -1,0 +1,21 @@
+mi_asistente_bot/
+├── venv/                  # El entorno virtual que ya creaste (no se toca)
+├── config/
+│   ├── __init__.py
+│   └── settings.py        # Tokens, IDs de usuario permitidos, configuraciones
+├── handlers/              # Lógica de las interacciones con el usuario
+│   ├── __init__.py
+│   ├── agenda.py          # Comandos de agenda (/ver_hoy, /nueva_tarea)
+│   ├── reminders.py       # Gestión de recordatorios y alarmas
+│   └── start.py           # Comando /start y ayuda
+├── services/              # Conexiones externas o bases de datos
+│   ├── __init__.py
+│   ├── calendar_service.py# Lógica para conectar con Google Calendar (opcional)
+│   └── database.py        # Si decides guardar datos en un archivo SQLite o JSON
+├── utils/                 # Funciones de ayuda
+│   ├── __init__.py
+│   └── date_parser.py     # Para entender fechas como "mañana a las 5pm"
+├── .env                   # Archivo secreto para tu TELEGRAM_TOKEN
+├── .gitignore             # Para evitar subir venv/ y .env a GitHub
+├── bot.py                 # El archivo principal que arranca todo
+└── requirements.txt       # Lista de librerías instaladas
