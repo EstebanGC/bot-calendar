@@ -1,7 +1,7 @@
 # Installed Libraries (for Google Calendar and Telegram)
 
 # python-telegram-bot: The main engine used to build and manage the Telegram bot.
-python-telegram-bot
+python-telegram-bot[job-queue]
 
 # python-dotenv: Used to securely read environment variables from your .env file.
 python-dotenv
