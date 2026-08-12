@@ -11,6 +11,8 @@ from telegram.ext import (
     MessageHandler, 
     filters
 )
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Google API Libraries
 from google.auth.transport.requests import Request
@@ -32,6 +34,23 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 # Conversation states for /new
 TITLE, DATE, START_TIME, DESCRIPTION = range(4)
+
+# ================= SERVER DUMMY PARA RENDER (HEALTH CHECK) =================
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive and running!")
+
+    def log_message(self, format, *args):
+        return  # Desactiva logs molestos del server HTTP en consola
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
+    logging.info(f"Servidor HTTP dummy corriendo en el puerto {port}")
+    server.serve_forever()
+# =========================================================================
 
 def get_calendar_service():
     """Authenticates the user and returns the Google Calendar service object."""
@@ -73,7 +92,6 @@ async def check_calendar_logic(bot, job_queue):
         service = get_calendar_service()
         
         now = datetime.now()
-        # Fetch events for the next 3 days to guarantee capturing updates safely
         end_time = now + timedelta(days=3)
 
         events_result = service.events().list(
@@ -94,16 +112,13 @@ async def check_calendar_logic(bot, job_queue):
             job_name = f"reminder_{event['id']}"
             current_jobs = job_queue.get_jobs_by_name(job_name)
             
-            # If the reminder isn't scheduled in the Job Queue yet, we set it up
             if not current_jobs:
                 start_time_str = event['start'].get('dateTime', event['start'].get('date'))
                 
-                # Handle All-day events
                 if 'T' not in start_time_str:
                     event_start_dt = datetime.strptime(start_time_str, "%Y-%m-%d").replace(hour=8, minute=0)
                     display_time = "All Day (Reminder at 08:00)"
                 else:
-                    # Parse timestamp with timezone offsets correctly
                     clean_ts = start_time_str
                     if clean_ts[-3] == ':':
                         clean_ts = clean_ts[:-3] + clean_ts[-2:]
@@ -115,10 +130,8 @@ async def check_calendar_logic(bot, job_queue):
                     
                     display_time = start_time_str.split('T')[1][:5]
 
-                # Calculate remaining seconds from "now" until the event starts
                 time_diff = (event_start_dt - datetime.now()).total_seconds()
                 
-                # Skip if the event is already in the past
                 if time_diff <= 0:
                     continue
 
@@ -128,7 +141,6 @@ async def check_calendar_logic(bot, job_queue):
                     'description': event.get('description', 'No description')
                 }
 
-                # Schedule the task to trigger in exactly 'time_diff' seconds
                 job_queue.run_once(send_event_reminder, when=time_diff, name=job_name, data=event_data)
                 scheduled_jobs += 1
 
@@ -142,7 +154,6 @@ async def check_calendar_logic(bot, job_queue):
         return f"Error connecting to Google Calendar: {e}"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the /start command to immediately synchronize calendar alerts."""
     if not is_authorized_user(update):
         await update.message.reply_text("You are not authorized to use this assistant.")
         return
@@ -152,13 +163,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(status_message)
 
 async def check_calendar_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Repetitive background job for the Job Queue."""
     await check_calendar_logic(context.bot, context.job_queue)
 
 # ================= CONVERSATION FLOW FOR THE /NEW COMMAND =================
 
 async def new_event_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Initiates the new event creation wizard."""
     if not is_authorized_user(update):
         await update.message.reply_text("You are not authorized.")
         return ConversationHandler.END
@@ -167,13 +176,11 @@ async def new_event_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return TITLE
 
 async def new_event_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Saves the title and asks for the date."""
     context.user_data['title'] = update.message.text
     await update.message.reply_text("Got it! Now, what **date**? Please use **YYYY-MM-DD** format (e.g., 2026-06-25):")
     return DATE
 
 async def new_event_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Validates the date format and asks for the start time."""
     date_text = update.message.text
     try:
         datetime.strptime(date_text, "%Y-%m-%d")
@@ -186,7 +193,6 @@ async def new_event_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return START_TIME
 
 async def new_event_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Validates the time format and asks for the description."""
     time_text = update.message.text
     try:
         datetime.strptime(time_text, "%H:%M")
@@ -199,7 +205,6 @@ async def new_event_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return DESCRIPTION
 
 async def new_event_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Saves description, uploads the event to Google Calendar, and triggers an immediate sync."""
     desc_text = update.message.text
     if desc_text.lower() == '/skip':
         context.user_data['description'] = "Created via Telegram Bot"
@@ -211,13 +216,10 @@ async def new_event_description(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         service = get_calendar_service()
         
-        # Combine local date and time strings
         start_datetime_str = f"{context.user_data['date']}T{context.user_data['time']}:00"
         start_dt = datetime.strptime(start_datetime_str, "%Y-%m-%dT%H:%M:%S")
-        # Defaults to a 1-hour duration window
         end_dt = start_dt + timedelta(hours=1)
         
-        # Retrieve the local operating system timezone context automatically
         local_tz = datetime.now().astimezone().tzinfo
         
         event_body = {
@@ -225,7 +227,7 @@ async def new_event_description(update: Update, context: ContextTypes.DEFAULT_TY
             'description': context.user_data['description'],
             'start': {
                 'dateTime': start_dt.replace(tzinfo=local_tz).isoformat(),
-                'timeZone': 'America/Bogota', # Adjusted to your default context location
+                'timeZone': 'America/Bogota',
             },
             'end': {
                 'dateTime': end_dt.replace(tzinfo=local_tz).isoformat(),
@@ -233,12 +235,10 @@ async def new_event_description(update: Update, context: ContextTypes.DEFAULT_TY
             },
         }
 
-        # Insert entry into Google Calendar
         created_event = service.events().insert(calendarId='primary', body=event_body).execute()
         
         await update.message.reply_text(f"✅ **Event created successfully!**\n🔗 [Open in Google Calendar]({created_event.get('htmlLink')})", parse_mode="Markdown")
         
-        # Force an immediate alarm synchronization run to instantly queue up the newly added event alert
         await check_calendar_logic(context.bot, context.job_queue)
 
     except Exception as e:
@@ -248,14 +248,15 @@ async def new_event_description(update: Update, context: ContextTypes.DEFAULT_TY
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Aborts the interactive creation wizard."""
     await update.message.reply_text("Process cancelled. No event was created.")
     return ConversationHandler.END
 
 def main():
+    # Start HTTP server on background for Render
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+
     app = Application.builder().token(TOKEN).build()
 
-    # Setup the conversation handler mapping for /new
     new_event_handler = ConversationHandler(
         entry_points=[CommandHandler("new", new_event_start)],
         states={
@@ -270,7 +271,6 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(new_event_handler)
     
-    # Automatically tracks and schedules upcoming structural database updates every 15 minutes (900 seconds)
     app.job_queue.run_repeating(check_calendar_job, interval=900, first=10)
 
     print("Assistant running... Use /start to sync or /new to create events.")
