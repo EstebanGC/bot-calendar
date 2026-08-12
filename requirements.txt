@@ -1,11 +1,16 @@
 # Installed Libraries (for Google Calendar and Telegram)
 
-python-telegram-bot: The main engine used to build and manage the Telegram bot.
+# python-telegram-bot: The main engine used to build and manage the Telegram bot.
+python-telegram-bot
 
-python-dotenv: Used to securely read environment variables from your .env file.
+# python-dotenv: Used to securely read environment variables from your .env file.
+python-dotenv
 
-google-api-python-client: The official client to easily interact with Google services (like Calendar).
+# google-api-python-client: The official client to easily interact with Google services (like Calendar).
+google-api-python-client
 
-google-auth-oauthlib: Handles OAuth 2.0 authentication and opens your browser for the initial login.
+# google-auth-oauthlib: Handles OAuth 2.0 authentication and opens your browser for the initial login.
+google-auth-oauthlib
 
-google-auth-httplib2: Manages the secure transport and delivery of digitally signed requests to Google's servers.
+# google-auth-httplib2: Manages the secure transport and delivery of digitally signed requests to Google's servers.
+google-auth-httplib2
